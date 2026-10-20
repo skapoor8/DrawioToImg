@@ -1,0 +1,20 @@
+*drawiotoimg.txt*  Draw.io and SVG previews
+
+DrawioToImg renders .drawio and .drawio.svg files beside their source as PNG.
+Plain .svg files in diagrams/ directories are also rendered automatically.
+
+SETUP                                                   *drawiotoimg-setup*
+    require("drawiotoimg").setup({})
+
+Requires Neovim 0.10+, Draw.io Desktop for editable diagrams, and rsvg-convert
+for plain SVG. Snacks and a supported terminal provide optional previews.
+
+COMMANDS                                                *drawiotoimg-commands*
+:DrawioToImg [file]       Export the current or selected diagram.
+:DrawioToImgAll [dir]     Export supported files beneath dir or the Git root.
+
+Inline svg/drawio fences and standalone raw SVG render in Markdown. Insert
+mode within the block reveals source. See README.md for configuration,
+installation, output names, supported SVG features and examples.
+
+ vim:tw=78:ts=8:ft=help:norl:

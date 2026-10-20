@@ -1,0 +1,9 @@
+[tools]
+neovim = "0.12.5"
+stylua = "2.1.0"
+
+[tasks.test]
+run = "nvim --headless -u NONE -l tests/run.lua"
+
+[tasks.lint]
+run = "stylua --check lua libs tests"
