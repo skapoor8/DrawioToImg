@@ -63,9 +63,9 @@ This uses `rsvg-convert`, while the Draw.io examples use Draw.io Desktop. Expect
 
 ![SVG source flowing into an inline preview](diagrams/inline.png)
 
-## 4. Render a fenced SVG inline
+## 4. Keep fenced SVG visible as code
 
-The following is a live top-level `svg` block. Open this page in Neovim to see its image replace the code. On GitHub, the code remains visible.
+The following `svg` code fence stays visible as source in both Neovim and GitHub. This is an example to copy, not an automatic image preview.
 
 ```svg
 <svg xmlns="http://www.w3.org/2000/svg" width="640" height="140" viewBox="0 0 640 140">
@@ -80,7 +80,7 @@ The following is a live top-level `svg` block. Open this page in Neovim to see i
 </svg>
 ```
 
-Enter Insert mode inside the block to edit it, then return to normal mode to restore the image. If your render-markdown settings reveal source near the cursor, move the cursor below this paragraph. Your document keeps its SVG source; the generated PNG lives in Neovim's cache.
+To opt in to previewing top-level SVG and Draw.io fences, set `inline_fences = true` in the plugin options. Keep the default `false` to read code examples without image replacements.
 
 ## 5. Render raw SVG inline
 
@@ -99,9 +99,9 @@ A standalone SVG element does not need a code fence. This is a live example; Git
 
 Move the cursor here to leave the example above. Its expected image is the same as the plain SVG preview in section 3. Start `<svg>` on its own line, and keep external resources out of the SVG so the cached copy is self-contained.
 
-## 6. Render Draw.io XML inline
+## 6. Keep fenced Draw.io XML visible as code
 
-A `drawio` fence uses the same exporter as a `.drawio` file. This is another live example:
+A `drawio` fence also stays visible as source by default. If you opt in with `inline_fences = true`, it uses the same exporter as a `.drawio` file:
 
 ```drawio
 <mxfile host="app.diagrams.net">
@@ -131,7 +131,7 @@ A `drawio` fence uses the same exporter as a `.drawio` file. This is another liv
 </mxfile>
 ```
 
-Move the cursor here to leave the inline diagram. Its expected image is the three-step pipeline in section 1. The block can contain uncompressed XML, as above, or an ordinary Draw.io document with compressed diagram data.
+With fenced previews enabled, the expected image is the automatic rendering pipeline in section 1. The block can contain uncompressed XML, as above, or an ordinary Draw.io document with compressed diagram data.
 
 ## Optional: force a refresh of all file examples
 
@@ -141,7 +141,7 @@ Saving sources in Neovim and opening Markdown previews already trigger automatic
 :DrawioToImgAll docs/diagrams
 ```
 
-This regenerates three PNG files beside the editable sources. Inline blocks refresh independently as you edit this Markdown page; they do not add files to `docs/diagrams/`.
+This regenerates three PNG files beside the editable sources. Raw inline SVG (and fenced diagrams when opted in) refresh independently as you edit this Markdown page; they do not add files to `docs/diagrams/`.
 
 For a Markdown page that must show images on GitHub, link to the committed PNG:
 

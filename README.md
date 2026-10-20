@@ -63,7 +63,9 @@ Rendering runs in the background, one diagram at a time. Saving an active diagra
 
 ## Inline diagrams
 
-Top-level fenced `svg` and `drawio` blocks render automatically:
+Raw `<svg>...</svg>` elements render automatically outside code fences. Code fences remain visible as source by default, including `svg`, `drawio`, and `markdown` examples.
+
+If you explicitly want top-level `svg` and `drawio` fences to become previews, set `inline_fences = true`. For example:
 
 ````markdown
 ```svg
@@ -82,9 +84,9 @@ Top-level fenced `svg` and `drawio` blocks render automatically:
 ```
 ````
 
-Standalone raw `<svg>...</svg>` elements also render, including single-line elements. Start the opening `<svg>` tag on its own line, optionally indented up to three spaces. XML declarations outside the element are not part of the preview. Examples inside other code fences, lists, and block quotes remain source. Image links inside fenced Markdown examples also stay as code.
+Raw SVG supports both multiline and single-line elements. Start the opening `<svg>` tag on its own line, optionally indented up to three spaces. XML declarations outside the element are not part of the preview. Examples inside other code fences, lists, and block quotes remain source. Image links inside fenced Markdown examples also stay as code.
 
-The PNG visually replaces the block in normal mode. Enter Insert mode inside it to edit the source; return to normal mode to restore the preview. Inline images live in Neovim's cache. No links or generated files are inserted into Markdown. Inline detection does not require Treesitter.
+For raw SVG (and fenced diagrams when opted in), the PNG visually replaces the source in normal mode. Enter Insert mode inside it to edit the source; return to normal mode to restore the preview. Inline images live in Neovim's cache. No links or generated files are inserted into Markdown. Inline detection does not require Treesitter.
 
 Plain SVG uses librsvg: browser-only SVG features such as HTML `foreignObject` labels may render differently. Keep editable Draw.io SVGs named `.drawio.svg` so they use the Draw.io exporter, which retains those labels. Inline SVG should be self-contained; relative external resources are not copied into its cache directory.
 
@@ -99,7 +101,8 @@ require("drawiotoimg").setup({
   svg_command = "rsvg-convert",
   auto_render = true,
   snacks = true,
-  inline_svg = true, -- controls both SVG and Draw.io inline blocks
+  inline_svg = true, -- preview raw SVG outside code fences
+  inline_fences = false, -- opt in to rendering svg/drawio fences
   scale = 2,
   timeout = 120000, -- milliseconds per export
   -- inline_source_visible = function(buf, first, last)

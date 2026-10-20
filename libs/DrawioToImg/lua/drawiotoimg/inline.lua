@@ -9,7 +9,7 @@ local attached = false
 local fences_ns = vim.api.nvim_create_namespace("drawiotoimg.fences")
 
 -- Parse fences without requiring Treesitter, and ignore examples inside other fences.
-function M.blocks(lines)
+function M.blocks(lines, render_fences)
 	local blocks, fences, fence, raw, list_indent = {}, {}, nil, nil, nil
 	for row, line in ipairs(lines) do
 		if not fence and not raw then
@@ -38,8 +38,8 @@ function M.blocks(lines)
 				local lang = vim.trim(info)
 				fence = { first = row, marker = marker, lang = lang, indent = #indent }
 			elseif marker:sub(1, 1) == fence.marker:sub(1, 1) and #marker >= #fence.marker and vim.trim(info) == "" then
-				fences[#fences + 1] = { first = fence.first, last = row }
-				if (fence.lang == "svg" or fence.lang == "drawio") and row > fence.first + 1 then
+				fences[#fences + 1] = { first = fence.first, last = row, lang = fence.lang }
+				if render_fences and (fence.lang == "svg" or fence.lang == "drawio") and row > fence.first + 1 then
 					local content = {}
 					for i = fence.first + 1, row - 1 do
 						content[#content + 1] = lines[i]:gsub("^" .. string.rep(" ", fence.indent), "", 1)
@@ -67,7 +67,7 @@ function M.blocks(lines)
 		end
 	end
 	if fence then
-		fences[#fences + 1] = { first = fence.first, last = #lines }
+		fences[#fences + 1] = { first = fence.first, last = #lines, lang = fence.lang }
 	end
 	return blocks, fences
 end
@@ -169,7 +169,11 @@ function M.update(buf)
 	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
 	local tick = vim.api.nvim_buf_get_changedtick(buf)
 	local previous = states[buf]
-	local blocks = previous and previous.tick == tick and previous.blocks or M.blocks(lines)
+	local blocks = previous
+			and previous.tick == tick
+			and previous.inline_fences == options.inline_fences
+			and previous.blocks
+		or M.blocks(lines, options.inline_fences)
 	local visible_source = editing(buf, blocks)
 	local ok, snapshot = pcall(settings)
 	if not ok then
@@ -177,14 +181,30 @@ function M.update(buf)
 		return
 	end
 	local width, height = M.bounds(buf)
-	local signature = vim.inspect({ tick, wins, width, height, visible_source, vim.o.background, M.key("", snapshot) })
+	local signature = vim.inspect({
+		tick,
+		wins,
+		width,
+		height,
+		visible_source,
+		vim.o.background,
+		options.inline_fences,
+		M.key("", snapshot),
+	})
 	-- Keep extmarks and virtual rows stable while scrolling or revisiting a buffer.
 	if previous and not previous.failed and previous.signature == signature then
 		return
 	end
 	clear(buf)
-	local state =
-		{ placements = {}, windows = {}, blocks = blocks, editing = visible_source, tick = tick, signature = signature }
+	local state = {
+		placements = {},
+		windows = {},
+		blocks = blocks,
+		editing = visible_source,
+		tick = tick,
+		signature = signature,
+		inline_fences = options.inline_fences,
+	}
 	states[buf] = state
 	for index, block in ipairs(blocks) do
 		if block.content ~= "" then
@@ -298,7 +318,7 @@ function M.filter(buf, matches)
 	if not options.snacks or not vim.api.nvim_buf_is_valid(buf) or vim.bo[buf].filetype ~= "markdown" then
 		return matches
 	end
-	local blocks, fences = M.blocks(vim.api.nvim_buf_get_lines(buf, 0, -1, false))
+	local blocks, fences = M.blocks(vim.api.nvim_buf_get_lines(buf, 0, -1, false), options.inline_fences)
 	return vim.tbl_filter(function(match)
 		local range = match.range
 		if not range then
@@ -308,7 +328,11 @@ function M.filter(buf, matches)
 			if range[1] >= fence.first and range[1] <= fence.last then
 				-- Preserve native charts that span their own top-level fence (e.g. math
 				-- and Mermaid), but never image links or nested charts inside examples.
-				if match.type == "image" or range[1] > fence.first then
+				if
+					match.type == "image"
+					or range[1] > fence.first
+					or (not options.inline_fences and (fence.lang == "svg" or fence.lang == "drawio"))
+				then
 					return false
 				end
 			end

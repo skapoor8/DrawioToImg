@@ -13,8 +13,9 @@ COMMANDS                                                *drawiotoimg-commands*
 :DrawioToImg [file]       Export the current or selected diagram.
 :DrawioToImgAll [dir]     Export supported files beneath dir or the Git root.
 
-Inline svg/drawio fences and standalone raw SVG render in Markdown. Insert
-mode within the block reveals source. See README.md for configuration,
+Raw SVG outside code fences renders in Markdown. Code fences stay visible
+by default; set inline_fences = true to preview svg/drawio fences. Insert
+mode within a preview reveals source. See README.md for configuration,
 installation, output names, supported SVG features and examples.
 
  vim:tw=78:ts=8:ft=help:norl:

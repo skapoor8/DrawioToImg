@@ -7,6 +7,7 @@ local options = {
 	auto_render = true,
 	snacks = true,
 	inline_svg = true,
+	inline_fences = false,
 	scale = 2,
 	timeout = 120000,
 }
@@ -55,6 +56,29 @@ function M.refresh()
 	end
 end
 
+-- Resolve symlink chains before naming cached PNGs. Chained resolvers must not
+-- keep appending cache prefixes to a basename on every refresh.
+function M.cache_png(path)
+	if path:match("^%a[%w+.-]*:") or not path:lower():match("%.png$") then
+		return path
+	end
+	local source = uv.fs_realpath(path)
+	local stat = source and uv.fs_stat(source)
+	if not stat or stat.type ~= "file" then
+		return path
+	end
+	local cache = vim.fn.stdpath("cache") .. "/drawiotoimg"
+	local version = vim.fn.sha256(source .. stat.mtime.sec .. stat.mtime.nsec .. stat.size)
+	local cached = cache .. "/" .. version .. ".png"
+	if not uv.fs_stat(cached) then
+		vim.fn.mkdir(cache, "p")
+		if not uv.fs_symlink(source, cached) then
+			return source
+		end
+	end
+	return cached
+end
+
 -- Only claim our source files; other resolvers (including MmdToImg) retain ownership.
 local resolving = {}
 function M.resolve(file, src)
@@ -82,20 +106,11 @@ function M.resolve(file, src)
 	if not stat then
 		return
 	end
-	local cache = vim.fn.stdpath("cache") .. "/drawiotoimg"
-	local version = vim.fn.sha256(output .. stat.mtime.sec .. stat.mtime.nsec .. stat.size):sub(1, 16)
-	local cached = cache .. "/" .. version .. "-" .. vim.fs.basename(output)
-	if not uv.fs_stat(cached) then
-		vim.fn.mkdir(cache, "p")
-		if not uv.fs_symlink(output, cached) then
-			return output
-		end
-	end
-	return cached
+	return M.cache_png(output)
 end
 
 -- Attach after Snacks loads without requiring it for users who do not install it.
-local snacks_resolver
+local snacks_resolver, resolver_backend
 function M.attach_snacks()
 	local snacks = package.loaded["snacks"]
 	if not options.snacks or not snacks or not snacks.did_setup then
@@ -106,11 +121,13 @@ function M.attach_snacks()
 	image.config.enabled = true
 	image.config.doc.enabled = true
 	require("drawiotoimg.inline").setup(M, options, plugin_dir, image)
-	if image.config.resolve ~= snacks_resolver or not snacks_resolver then
+	if resolver_backend ~= image then
 		local previous = image.config.resolve
 		snacks_resolver = function(file, src)
-			return (options.snacks and M.resolve(file, src)) or (previous and previous(file, src) or nil)
+			local resolved = (options.snacks and M.resolve(file, src)) or (previous and previous(file, src) or nil)
+			return resolved and M.cache_png(resolved) or nil
 		end
+		resolver_backend = image
 		image.config.resolve = snacks_resolver
 		snacks.config.image.resolve = snacks_resolver
 	end

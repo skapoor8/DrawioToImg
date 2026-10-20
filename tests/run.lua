@@ -59,10 +59,20 @@ local ok, err = xpcall(function()
 	assert(render(temp .. "/diagrams/test.svg", settings))
 	vim.notify = notify
 	assert(old == table.concat(vim.fn.readfile(temp .. "/diagrams/test.png", "b"), "\n"), "failure overwrote output")
-	local blocks = inline.blocks({ "```text", svg, "```", "```svg", svg, "```", svg, "~~~drawio", "<mxfile/>", "~~~" })
+	local blocks =
+		inline.blocks({ "```text", svg, "```", "```svg", svg, "```", svg, "~~~drawio", "<mxfile/>", "~~~" }, true)
 	assert(#blocks == 3 and blocks[1].fenced and not blocks[2].fenced and blocks[3].ext == ".drawio")
 	assert(#inline.blocks({ "- example", "  ```svg", "  " .. svg, "  ```" }) == 0)
 	assert(#inline.blocks({ "```svg", svg }) == 0)
+	assert(
+		#inline.blocks({ "```svg", svg, "```", "```drawio", "<mxfile/>", "```" }) == 0,
+		"Fenced code must remain source by default"
+	)
+	local cached = plugin.cache_png(temp .. "/diagrams/test.png")
+	for _ = 1, 100 do
+		assert(plugin.cache_png(cached) == cached, "Cache paths must be idempotent")
+	end
+	assert(#vim.fs.basename(cached) == 68, "Cache basename must have bounded length")
 	-- Mermaid SVG links must stay with MmdToImg's theme resolver.
 	write(temp .. "/diagrams/mermaid.svg", svg)
 	write(temp .. "/diagrams/mermaid.mmd", "flowchart LR; A-->B")
@@ -97,6 +107,7 @@ local ok, err = xpcall(function()
 	assert(count == 3, "scan count: " .. tostring(count))
 	-- Actual editor lifecycle with a synthetic display backend.
 	local active, created = 0, 0
+	local placement_ranges = {}
 	local found = {}
 	local image = {
 		config = { doc = {} },
@@ -109,7 +120,8 @@ local ok, err = xpcall(function()
 		},
 		placement = {},
 	}
-	image.placement.new = function(_, src)
+	image.placement.new = function(_, src, opts)
+		placement_ranges[#placement_ranges + 1] = opts.range
 		png(src)
 		active = active + 1
 		created = created + 1
@@ -120,7 +132,14 @@ local ok, err = xpcall(function()
 		}
 	end
 	package.loaded.snacks = { did_setup = true, config = { image = {} }, image = image }
-	plugin.setup({ snacks = true, inline_svg = true })
+	plugin.setup({ snacks = true, inline_svg = true, inline_fences = true })
+	local resolver = image.config.resolve
+	local resolver_calls = 0
+	local external_resolver = function(...)
+		resolver_calls = resolver_calls + 1
+		return resolver(...)
+	end
+	image.config.resolve = external_resolver
 	local ours = image.doc.find
 	local external = function(...)
 		return ours(...)
@@ -129,6 +148,13 @@ local ok, err = xpcall(function()
 	plugin.attach_snacks()
 	plugin.attach_snacks()
 	assert(image.doc.find == external, "Repeated setup must preserve wrappers installed by other plugins")
+	assert(image.config.resolve == external_resolver, "Repeated setup must not stack resolver wrappers")
+	local expected = image.config.resolve(temp .. "/README.md", "diagrams/test.svg")
+	for _ = 1, 100 do
+		plugin.attach_snacks()
+		assert(image.config.resolve(temp .. "/README.md", "diagrams/test.svg") == expected)
+	end
+	assert(resolver_calls == 101, "Resolver chain must remain constant after repeated attachment")
 	local examples = vim.api.nvim_create_buf(false, true)
 	vim.api.nvim_buf_set_lines(examples, 0, -1, false, {
 		"```markdown",
@@ -176,18 +202,30 @@ local ok, err = xpcall(function()
 		#filtered == 4 and filtered[1].id == "live-svg" and filtered[4].id == "live-link",
 		"Link previews must still ignore code examples when inline rendering is disabled"
 	)
-	plugin.setup({ inline_svg = true })
+	plugin.setup({ inline_svg = true, inline_fences = false })
+	image.doc.find(examples, function(matches)
+		filtered = matches
+	end)
+	assert(
+		#filtered == 2 and filtered[1].id == "mermaid" and filtered[2].id == "live-link",
+		"SVG fences must remain source by default, including native Snacks matches"
+	)
 	vim.api.nvim_buf_delete(examples, { force = true })
 	found = {}
 	vim.cmd.enew()
 	local buf = vim.api.nvim_get_current_buf()
-	vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "```svg", svg, "```" })
+	vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "```svg", svg, "```", "", svg })
 	vim.bo[buf].filetype = "markdown"
 	assert(
 		vim.wait(10000, function()
 			return active == 1
 		end),
-		"automatic inline preview missing"
+		"automatic raw SVG preview missing"
+	)
+	assert(placement_ranges[#placement_ranges][1] == 5, "Only raw SVG may get an inline placement")
+	assert(
+		#vim.api.nvim_buf_get_extmarks(buf, vim.api.nvim_create_namespace("drawiotoimg.fences"), 0, -1, {}) == 0,
+		"Fenced code must not be concealed"
 	)
 	local before = created
 	inline.update(buf)
@@ -196,12 +234,18 @@ local ok, err = xpcall(function()
 	vim.api.nvim_get_mode = function()
 		return { mode = "i" }
 	end
-	vim.api.nvim_win_set_cursor(0, { 2, 0 })
+	vim.api.nvim_win_set_cursor(0, { 5, 0 })
 	inline.visibility(buf)
 	assert(active == 0)
 	vim.api.nvim_get_mode = mode
 	inline.visibility(buf)
 	assert(active == 1)
+	plugin.setup({ inline_fences = true })
+	inline.update(buf)
+	assert(active == 2, "Explicit fence opt-in must add a preview")
+	plugin.setup({ inline_fences = false })
+	inline.update(buf)
+	assert(active == 1, "Disabling fence previews must reveal existing fences immediately")
 	plugin.setup({ inline_svg = false })
 	assert(active == 0)
 	assert(vim.api.nvim_buf_get_lines(buf, 0, -1, false)[2] == svg, "source changed")
