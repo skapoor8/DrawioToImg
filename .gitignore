@@ -1,2 +1,6 @@
+*.drawiotoimg-tmp
 .DS_Store
+doc/tags
+libs/DrawioToImg/docs/tags
+node_modules/
 *.tmp
