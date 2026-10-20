@@ -97,13 +97,14 @@ local ok, err = xpcall(function()
 	assert(count == 3, "scan count: " .. tostring(count))
 	-- Actual editor lifecycle with a synthetic display backend.
 	local active, created = 0, 0
+	local found = {}
 	local image = {
 		config = { doc = {} },
 		setup = function() end,
 		doc = {
 			attach = function() end,
 			find = function(_, cb)
-				cb({})
+				cb(found)
 			end,
 		},
 		placement = {},
@@ -120,6 +121,64 @@ local ok, err = xpcall(function()
 	end
 	package.loaded.snacks = { did_setup = true, config = { image = {} }, image = image }
 	plugin.setup({ snacks = true, inline_svg = true })
+	local ours = image.doc.find
+	local external = function(...)
+		return ours(...)
+	end
+	image.doc.find = external
+	plugin.attach_snacks()
+	plugin.attach_snacks()
+	assert(image.doc.find == external, "Repeated setup must preserve wrappers installed by other plugins")
+	local examples = vim.api.nvim_create_buf(false, true)
+	vim.api.nvim_buf_set_lines(examples, 0, -1, false, {
+		"```markdown",
+		"![SVG](diagrams/test.svg)",
+		"```",
+		"````markdown",
+		"```svg",
+		svg,
+		"```",
+		"````",
+		"```svg",
+		svg,
+		"```",
+		svg,
+		"```mermaid",
+		"graph LR; A-->B",
+		"```",
+		"![Live](diagrams/test.svg)",
+		"```markdown",
+		"![Unclosed](diagrams/test.svg)",
+	})
+	vim.bo[examples].filetype = "markdown"
+	found = {
+		{ id = "example-link", type = "image", range = { 2, 0, 2, 30 } },
+		{ id = "nested-svg", type = "chart", range = { 5, 0, 7, 3 } },
+		{ id = "live-svg", type = "chart", range = { 9, 0, 11, 3 } },
+		{ id = "raw-svg", lang = "html", type = "image", range = { 12, 0, 12, #svg } },
+		{ id = "mermaid", type = "chart", range = { 13, 0, 15, 3 } },
+		{ id = "live-link", type = "image", range = { 16, 0, 16, 30 } },
+		{ id = "unclosed-link", type = "image", range = { 18, 0, 18, 30 } },
+	}
+	local filtered
+	image.doc.find(examples, function(matches)
+		filtered = matches
+	end)
+	assert(
+		#filtered == 2 and filtered[1].id == "mermaid" and filtered[2].id == "live-link",
+		"Code examples and duplicate raw SVG must be filtered without hiding live charts or links"
+	)
+	plugin.setup({ inline_svg = false })
+	image.doc.find(examples, function(matches)
+		filtered = matches
+	end)
+	assert(
+		#filtered == 4 and filtered[1].id == "live-svg" and filtered[4].id == "live-link",
+		"Link previews must still ignore code examples when inline rendering is disabled"
+	)
+	plugin.setup({ inline_svg = true })
+	vim.api.nvim_buf_delete(examples, { force = true })
+	found = {}
 	vim.cmd.enew()
 	local buf = vim.api.nvim_get_current_buf()
 	vim.api.nvim_buf_set_lines(buf, 0, -1, false, { "```svg", svg, "```" })

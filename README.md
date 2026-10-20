@@ -2,6 +2,17 @@
 
 Render Draw.io diagrams and inline SVG in Neovim. Based on [MmdToImg](https://github.com/skapoor8/MmdToImg), with optional Snacks image previews.
 
+## Try the examples
+
+Open the [usage showcase](docs/usage.md) in Neovim to test `.drawio` links, editable `.drawio.svg` images, plain SVG files, fenced SVG/Draw.io blocks, and raw inline SVG. It includes editable sources and generated PNGs, so you can compare the previews on GitHub too.
+
+![Save in Neovim; PNG and preview update automatically](docs/diagrams/pipeline.drawio.png)
+
+```sh
+cd ~/Projects/DrawioToImg
+nvim docs/usage.md
+```
+
 ## Requirements
 
 - Neovim 0.10 or later.
@@ -71,7 +82,7 @@ Top-level fenced `svg` and `drawio` blocks render automatically:
 ```
 ````
 
-Standalone raw `<svg>...</svg>` elements also render, including single-line elements. Start the opening `<svg>` tag on its own line, optionally indented up to three spaces. XML declarations outside the element are not part of the preview. Examples inside other code fences, lists, and block quotes remain source.
+Standalone raw `<svg>...</svg>` elements also render, including single-line elements. Start the opening `<svg>` tag on its own line, optionally indented up to three spaces. XML declarations outside the element are not part of the preview. Examples inside other code fences, lists, and block quotes remain source. Image links inside fenced Markdown examples also stay as code.
 
 The PNG visually replaces the block in normal mode. Enter Insert mode inside it to edit the source; return to normal mode to restore the preview. Inline images live in Neovim's cache. No links or generated files are inserted into Markdown. Inline detection does not require Treesitter.
 

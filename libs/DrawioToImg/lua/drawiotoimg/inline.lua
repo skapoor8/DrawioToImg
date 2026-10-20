@@ -10,7 +10,7 @@ local fences_ns = vim.api.nvim_create_namespace("drawiotoimg.fences")
 
 -- Parse fences without requiring Treesitter, and ignore examples inside other fences.
 function M.blocks(lines)
-	local blocks, fence, raw, list_indent = {}, nil, nil, nil
+	local blocks, fences, fence, raw, list_indent = {}, {}, nil, nil, nil
 	for row, line in ipairs(lines) do
 		if not fence and not raw then
 			local spaces = #(line:match("^ *") or "")
@@ -38,6 +38,7 @@ function M.blocks(lines)
 				local lang = vim.trim(info)
 				fence = { first = row, marker = marker, lang = lang, indent = #indent }
 			elseif marker:sub(1, 1) == fence.marker:sub(1, 1) and #marker >= #fence.marker and vim.trim(info) == "" then
+				fences[#fences + 1] = { first = fence.first, last = row }
 				if (fence.lang == "svg" or fence.lang == "drawio") and row > fence.first + 1 then
 					local content = {}
 					for i = fence.first + 1, row - 1 do
@@ -65,7 +66,10 @@ function M.blocks(lines)
 			end
 		end
 	end
-	return blocks
+	if fence then
+		fences[#fences + 1] = { first = fence.first, last = #lines }
+	end
+	return blocks, fences
 end
 
 local function settings()
@@ -271,6 +275,7 @@ function M.stop()
 	end
 	if image and image.doc.find == wrapped_find then
 		image.doc.find = original_find
+		original_find, wrapped_find = nil, nil
 	end
 end
 
@@ -287,50 +292,71 @@ local function update()
 	end, 150)
 end
 
-local function owns(buf, match)
-	if
-		not options.inline_svg
-		or not options.snacks
-		or not vim.api.nvim_buf_is_valid(buf)
-		or not vim.api.nvim_buf_is_loaded(buf)
-		or vim.bo[buf].filetype ~= "markdown"
-		or (match.lang ~= "svg" and match.lang ~= "drawio")
-		or match.type ~= "chart"
-		or not match.range
-	then
-		return false
+-- Markdown fenced examples can have their own injected parser. Snacks sees
+-- image links in those injected trees as ordinary document images.
+function M.filter(buf, matches)
+	if not options.snacks or not vim.api.nvim_buf_is_valid(buf) or vim.bo[buf].filetype ~= "markdown" then
+		return matches
 	end
-	for _, block in ipairs(M.blocks(vim.api.nvim_buf_get_lines(buf, 0, -1, false))) do
-		if block.content ~= "" and match.range[1] >= block.first and match.range[3] <= block.last then
+	local blocks, fences = M.blocks(vim.api.nvim_buf_get_lines(buf, 0, -1, false))
+	return vim.tbl_filter(function(match)
+		local range = match.range
+		if not range then
 			return true
 		end
-	end
-	return false
+		for _, fence in ipairs(fences) do
+			if range[1] >= fence.first and range[1] <= fence.last then
+				-- Preserve native charts that span their own top-level fence (e.g. math
+				-- and Mermaid), but never image links or nested charts inside examples.
+				if match.type == "image" or range[1] > fence.first then
+					return false
+				end
+			end
+		end
+		if options.inline_svg then
+			for _, block in ipairs(blocks) do
+				-- Also own Snacks' HTML match for raw SVG, avoiding duplicate placements.
+				if range[1] >= block.first and range[3] <= block.last then
+					return false
+				end
+			end
+		end
+		return true
+	end, matches)
 end
 
 function M.setup(renderer, opts, root, backend)
 	if image ~= backend then
 		M.stop()
+		original_find, wrapped_find = nil, nil
 	end
 	plugin, options, plugin_dir, image = renderer, opts, root, backend
-	if not opts.inline_svg or not opts.snacks then
+	if not opts.snacks then
 		M.stop()
 		return
 	end
-	enabled = true
 	-- Keep Snacks previews for blocks and document types this module cannot handle.
-	if image.doc.find ~= wrapped_find then
+	-- Another plugin may wrap our finder. Keep our existing wrapper in that chain.
+	if not wrapped_find then
 		original_find = image.doc.find
 		local previous = original_find
 		wrapped_find = function(buf, callback, find_opts)
 			return previous(buf, function(matches)
-				callback(vim.tbl_filter(function(match)
-					return not owns(buf, match)
-				end, matches))
+				callback(M.filter(buf, matches))
 			end, find_opts)
 		end
 		image.doc.find = wrapped_find
 	end
+	if not opts.inline_svg then
+		enabled, attached = false, false
+		generation = generation + 1
+		pcall(vim.api.nvim_del_augroup_by_name, "DrawioToImgInline")
+		for buf in pairs(states) do
+			clear(buf)
+		end
+		return
+	end
+	enabled = true
 	if attached then
 		update()
 		return
