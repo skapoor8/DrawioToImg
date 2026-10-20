@@ -1,3 +1,4 @@
+-- Run from libs/DrawioToImg: nvim --headless -u NONE -l tests/smoke.lua
 vim.opt.runtimepath:prepend(vim.fn.getcwd())
 local plugin = require("drawiotoimg")
 local inline = require("drawiotoimg.inline")

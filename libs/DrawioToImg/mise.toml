@@ -1,0 +1,48 @@
+[tools]
+neovim = "0.12.6"
+imagemagick = "7.1.2_27"
+stylua = "2.1.0"
+
+[tasks.install]
+description = "Install project dependencies"
+run = 'rsvg-convert --version'
+
+[tasks.build]
+description = "Run the build contract"
+run = 'nvim --headless -u NONE -l tests/syntax.lua'
+
+[tasks.clean]
+description = "Run the clean contract"
+run = 'echo "DrawioToImg: clean"'
+
+[tasks.test]
+description = "Run the test contract"
+run = 'nvim --headless -u NONE -l tests/smoke.lua'
+
+[tasks.lint]
+description = "Run the lint contract"
+run = 'stylua --check lua tests'
+
+[tasks."lint:fix"]
+description = "Run the lint:fix contract"
+run = 'stylua lua tests'
+
+[tasks.format]
+description = "Run the format contract"
+run = 'stylua lua tests'
+
+[tasks."format:check"]
+description = "Run the format:check contract"
+run = 'stylua --check lua tests'
+
+[tasks.env-pull]
+description = "Run the env-pull contract"
+run = 'echo "DrawioToImg: env-pull"'
+
+[tasks."publish:rc"]
+description = "Run the publish:rc contract"
+run = 'echo "DrawioToImg: publish:rc"'
+
+[tasks.publish]
+description = "Run the publish contract"
+run = 'echo "DrawioToImg: publish"'
